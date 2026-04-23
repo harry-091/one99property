@@ -11,7 +11,7 @@ const app = express();
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || env.clientUrls.includes(origin)) {
+      if (!origin || env.clientUrls.includes("*") || env.clientUrls.includes(origin)) {
         return callback(null, true);
       }
 
