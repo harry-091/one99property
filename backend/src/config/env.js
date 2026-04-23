@@ -1,7 +1,10 @@
 import dotenv from "dotenv";
 
 dotenv.config({ path: ".env" });
-dotenv.config({ path: ".env.local", override: true });
+
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config({ path: ".env.local", override: true });
+}
 
 export const env = {
   port: Number(process.env.PORT || 5000),
