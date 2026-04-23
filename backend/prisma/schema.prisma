@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  channel_partner
+  staff
+  manager
+  admin
+  rental_team
+}
+
+enum PropertyType {
+  apartment
+  villa
+  plot
+  commercial
+  rental
+  other
+}
+
+enum LeadCategory {
+  normal
+  hot
+}
+
+enum LeadStatus {
+  new
+  in_progress
+  follow_up
+  converted
+  dropped
+  hot_lead
+  booked
+}
+
+enum NotificationChannel {
+  system
+  email
+}
+
+model User {
+  id               BigInt             @id @default(autoincrement())
+  fullName         String             @map("full_name") @db.VarChar(120)
+  email            String             @unique @db.VarChar(160)
+  phone            String             @db.VarChar(30)
+  passwordHash     String             @map("password_hash") @db.VarChar(255)
+  role             UserRole
+  companyName      String?            @map("company_name") @db.VarChar(160)
+  isActive         Boolean            @default(true) @map("is_active")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdLeads     Lead[]             @relation("LeadCreator")
+  assignedLeads    Lead[]             @relation("LeadAssignee")
+  managedLeads     Lead[]             @relation("LeadManager")
+  statusHistory    LeadStatusHistory[]
+  assignmentTarget LeadAssignment[]   @relation("AssignmentTarget")
+  assignmentBy     LeadAssignment[]   @relation("AssignmentBy")
+  assignmentManage LeadAssignment[]   @relation("AssignmentManager")
+  activities       LeadActivity[]
+  notifications    NotificationLog[]
+
+  @@map("users")
+}
+
+model Lead {
+  id                BigInt              @id @default(autoincrement())
+  fullName          String              @map("full_name") @db.VarChar(120)
+  phone             String              @db.VarChar(30)
+  email             String?             @db.VarChar(160)
+  location          String              @db.VarChar(160)
+  investmentRange   String              @map("investment_range") @db.VarChar(80)
+  propertyType      PropertyType        @default(apartment) @map("property_type")
+  leadSource        String              @default("manual") @map("lead_source") @db.VarChar(80)
+  leadCategory      LeadCategory        @default(normal) @map("lead_category")
+  currentStatus     LeadStatus          @default(new) @map("current_status")
+  notes             String?
+  nextFollowUpAt    DateTime?           @map("next_follow_up_at") @db.Timestamptz(6)
+  bookedAt          DateTime?           @map("booked_at") @db.Timestamptz(6)
+  bookingValue      Decimal?            @map("booking_value") @db.Decimal(12, 2)
+  createdBy         BigInt              @map("created_by")
+  assignedTo        BigInt?             @map("assigned_to")
+  assignedManagerId BigInt?             @map("assigned_manager_id")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  creator           User                @relation("LeadCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  assignee          User?               @relation("LeadAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  manager           User?               @relation("LeadManager", fields: [assignedManagerId], references: [id], onDelete: SetNull)
+  statusHistory     LeadStatusHistory[]
+  assignments       LeadAssignment[]
+  activities        LeadActivity[]
+  notifications     NotificationLog[]
+
+  @@map("leads")
+}
+
+model LeadStatusHistory {
+  id        BigInt     @id @default(autoincrement())
+  leadId    BigInt     @map("lead_id")
+  status    LeadStatus
+  changedBy BigInt     @map("changed_by")
+  note      String?
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  lead      Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+
+  @@map("lead_status_history")
+}
+
+model LeadAssignment {
+  id                BigInt    @id @default(autoincrement())
+  leadId            BigInt    @map("lead_id")
+  assignedTo        BigInt    @map("assigned_to")
+  assignedBy        BigInt    @map("assigned_by")
+  assignedManagerId BigInt?   @map("assigned_manager_id")
+  note              String?   @db.VarChar(255)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lead              Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  target            User      @relation("AssignmentTarget", fields: [assignedTo], references: [id], onDelete: Cascade)
+  assigner          User      @relation("AssignmentBy", fields: [assignedBy], references: [id], onDelete: Cascade)
+  manager           User?     @relation("AssignmentManager", fields: [assignedManagerId], references: [id], onDelete: SetNull)
+
+  @@map("lead_assignments")
+}
+
+model LeadActivity {
+  id           BigInt    @id @default(autoincrement())
+  leadId       BigInt    @map("lead_id")
+  actorId      BigInt    @map("actor_id")
+  action       String    @db.VarChar(80)
+  note         String?
+  metadataJson Json?     @map("metadata_json")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actor        User      @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("lead_activities")
+}
+
+model NotificationLog {
+  id        BigInt               @id @default(autoincrement())
+  leadId    BigInt?              @map("lead_id")
+  userId    BigInt?              @map("user_id")
+  type      String               @db.VarChar(60)
+  channel   NotificationChannel  @default(system)
+  subject   String               @db.VarChar(180)
+  message   String
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  lead      Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user      User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("notification_logs")
+}
